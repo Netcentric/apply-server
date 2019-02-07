@@ -12,7 +12,7 @@ Apply Server was inspired by the config via http approach of nginx unit [1] and 
 
 ## Why not use Puppet/Chef/Ansible?
 
-In general all these tools are very useful (e.g. even to install the apply server agent, see "Setup Apply Server via puppet" below), however their strength is more in setting up a base configuration (OS level, files, directories, permissions, services etc.). For deployments of constantly changing code/configuration they lack support for a workflow where any people (including non-technical people) can make code/configuration travel across environments - here CI/CD severs like Jenkins have their strength. Many tool allow for deployment via http (e.g. Tomcat, Adobe AEM, etc.), Apply Server makes it easy to deploy Apache/Varnish/etc. configuration in the same way as software.
+In general all these tools are very useful (e.g. even to install the apply server agent, see [Setup Apply Server via puppet](#setup-apply-server-via-puppet) below), however their strength is more in setting up a base configuration (OS level, files, directories, permissions, services etc.). For deployments of constantly changing code/configuration they lack support for a workflow where any people (including non-technical people) can make code/configuration travel across environments - here CI/CD servers like Jenkins have their strength. Many tools allow for deployment via http (e.g. Tomcat, Adobe AEM, etc.), Apply Server makes it easy to deploy Apache/Varnish/etc. configuration in the same way as software.
 
 ## Why another http server? 
 
