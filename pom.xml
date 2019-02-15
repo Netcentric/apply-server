@@ -4,7 +4,7 @@
 
     <groupId>biz.netcentric.ops.applyserver</groupId>
     <artifactId>apply-server</artifactId>
-    <version>1.5.1-SNAPSHOT</version>
+    <version>1.5.1</version>
     <packaging>jar</packaging>
 
     <name>Apply Config Server</name>
@@ -37,7 +37,7 @@
         <connection>scm:git:ssh://git@github.com/Netcentric/apply-server.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/Netcentric/apply-server.git</developerConnection>
         <url>https://github.com/Netcentric/apply-server.git</url>
-        <tag>HEAD</tag>
+        <tag>1.5.1</tag>
     </scm>
 
     <distributionManagement>
