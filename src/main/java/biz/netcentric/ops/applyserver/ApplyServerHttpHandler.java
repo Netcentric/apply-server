@@ -278,10 +278,16 @@ class ApplyServerHttpHandler implements HttpHandler {
                     extension = bits[bits.length - 2] + "." + extension;
                 }
             } else {
-                throw new IllegalArgumentException(
-                        "Filename needs to be given as path of request or request parameter 'format' has to be used (actual: '"
-                                + requestPath
-                                + "')");
+            	
+            	if(!this.config.isOptionalPayload() || is.available() > 0) {
+                    throw new IllegalArgumentException(
+                            "Filename needs to be given as path of request or request parameter 'format' has to be used (actual: '"
+                                    + requestPath  + "')");            		
+            	} else {
+            		resultLogWriter.println("No payload given (payload is optional)");
+            		return;
+            	}
+
             }
             boolean isZippedTar = extension.equals("tar.gz") || extension.equals("tgz");
             boolean isTar = extension.equals("tar");
