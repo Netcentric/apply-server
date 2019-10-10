@@ -31,6 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.exec.DefaultExecutor;
@@ -385,7 +386,7 @@ class ApplyServerHttpHandler implements HttpHandler {
         DefaultExecutor executor = new DefaultExecutor();
         executor.setWorkingDirectory(executableFile.getParentFile().getAbsoluteFile());
         executor.setStreamHandler(new PumpStreamHandler(os));
-        executor.setExitValues(new int[] { 0, 1 });
+        executor.setExitValues(IntStream.range(0, 100).toArray());
         int exitValue = executor.execute(cmdLine);
         resultLogWriter.println("--- Apply script '" + scriptToRun + "' returned " + exitValue);
         if (exitValue > 0) {
