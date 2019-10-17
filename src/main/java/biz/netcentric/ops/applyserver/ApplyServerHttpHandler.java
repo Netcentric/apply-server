@@ -37,6 +37,8 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.ExecuteException;
 import org.apache.commons.exec.PumpStreamHandler;
+import org.apache.commons.io.output.ProxyOutputStream;
+import org.apache.commons.io.output.TeeOutputStream;
 import org.apache.commons.lang3.StringUtils;
 
 import com.sun.net.httpserver.Headers;
@@ -54,6 +56,7 @@ class ApplyServerHttpHandler implements HttpHandler {
     static final String APPLY_LOGFILE_DEFAULT = "_apply.log";
 
     static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    static final String HEADER_STREAM_RESPONSE = "Stream-Response";
 
     private final ApplyServerConfig config;
 
@@ -117,15 +120,15 @@ class ApplyServerHttpHandler implements HttpHandler {
             if ("GET".equals(method)) {
                 handleGet(exchange, requestPath);
             } else if ("POST".equals(method)) {
-            	
-            	// IP range is only checked for post requests
-            	if(config.getIpRange()!=null) {
-            		String remoteIpToCheck = exchange.getRemoteAddress().getAddress().getHostAddress();
-					if(!config.getIpRange().isInRange(remoteIpToCheck)) {
-						throw new IllegalArgumentException("IP Address "+ remoteIpToCheck + " not allowed");
-					}
-            	}
-            	
+            
+                // IP range is only checked for post requests
+                if(config.getIpRange()!=null) {
+                    String remoteIpToCheck = exchange.getRemoteAddress().getAddress().getHostAddress();
+                    if(!config.getIpRange().isInRange(remoteIpToCheck)) {
+                        throw new IllegalArgumentException("IP Address "+ remoteIpToCheck + " not allowed");
+                    }
+                }
+                
                 resultLogWriter
                         .println("Request from " + exchange.getRemoteAddress() + " at "
                                 + new SimpleDateFormat(DATE_FORMAT).format(new Date()));
@@ -222,8 +225,7 @@ class ApplyServerHttpHandler implements HttpHandler {
     }
 
     private void handlePost(HttpExchange exchange, ByteArrayOutputStream resultLog, PrintWriter resultLogWriter,
-            String requestPath,
-            Map<String, String> requestParams, String scriptToRun)
+            String requestPath, Map<String, String> requestParams, String scriptToRun)
             throws ExecuteException, IOException, FileNotFoundException {
 
         long startTime = System.currentTimeMillis();
@@ -236,22 +238,52 @@ class ApplyServerHttpHandler implements HttpHandler {
             resultLogWriter.println("Processing request " + requestPath);
         }
 
-        runApplyScript(resultLogWriter, resultLog, scriptToRun);
+        boolean scriptSuccess = true;
+        int responseCode = 200;
+        try(OutputStream responseBodyOutputStream = exchange.getResponseBody()) {
 
-        resultLogWriter.println("Finished after " + (System.currentTimeMillis() - startTime) + "ms");
-        resultLogWriter.flush();
+            String streamResponseHeader = exchange.getRequestHeaders().getFirst(HEADER_STREAM_RESPONSE);
+            boolean isStreamResponse = StringUtils.isNotBlank(streamResponseHeader) ? Boolean.valueOf(streamResponseHeader) : config.isStreamResponse();
+            
+            OutputStream scriptResultLog;
+            PrintWriter scriptResultLogWriter;
+            if(isStreamResponse) {
+                exchange.sendResponseHeaders(200, 0);
+                scriptResultLog  = new TeeOutputStream(resultLog, new AutoFlushingOutputStream(responseBodyOutputStream));
+                scriptResultLogWriter = new PrintWriter(scriptResultLog);
+            } else {
+                scriptResultLog = resultLog;
+                scriptResultLogWriter = resultLogWriter;
+            }
 
-        exchange.sendResponseHeaders(200, resultLog.size());
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(resultLog.toByteArray());
+            int exitValue = runApplyScript(scriptResultLogWriter, scriptResultLog, scriptToRun);
+            scriptSuccess = (exitValue == 0);
+            if(!scriptSuccess) {
+                responseCode = 500;
+            }
+            
+            scriptResultLogWriter.println("Finished after " + (System.currentTimeMillis() - startTime) + "ms");
+            scriptResultLogWriter.flush();
+
+            if(isStreamResponse) {
+                scriptResultLogWriter.println("\n"+exitValue);
+                scriptResultLogWriter.flush();
+            } else {
+                exchange.sendResponseHeaders(responseCode, resultLog.size());
+                responseBodyOutputStream.write(resultLog.toByteArray());
+            }
+        } finally {
+
+            // write file
+            try (OutputStream fileOs = new FileOutputStream(
+                    ApplyServer.getFile(this.config.getDestination(), APPLY_LOGFILE_DEFAULT))) {
+                fileOs.write(resultLog.toByteArray());
+            }
+        
         }
-
-        try (OutputStream fileOs = new FileOutputStream(
-                ApplyServer.getFile(this.config.getDestination(), APPLY_LOGFILE_DEFAULT))) {
-            fileOs.write(resultLog.toByteArray());
-        }
-
-        this.lastResults.add(new ScriptResult(scriptToRun, "success", 200, resultLog.toString()));
+        
+        // add to last results
+        this.lastResults.add(new ScriptResult(scriptToRun, scriptSuccess ? "success": "failed" , responseCode, resultLog.toString()));
     }
 
     private void handleUpload(HttpExchange exchange, PrintWriter resultLogWriter, String requestPath,
@@ -279,15 +311,15 @@ class ApplyServerHttpHandler implements HttpHandler {
                     extension = bits[bits.length - 2] + "." + extension;
                 }
             } else {
-            	
-            	if(!this.config.isOptionalPayload() || is.available() > 0) {
+                
+                if(!this.config.isOptionalPayload() || is.available() > 0) {
                     throw new IllegalArgumentException(
                             "Filename needs to be given as path of request or request parameter 'format' has to be used (actual: '"
-                                    + requestPath  + "')");            		
-            	} else {
-            		resultLogWriter.println("No payload given (payload is optional)");
-            		return;
-            	}
+                                    + requestPath  + "')");                    
+                } else {
+                    resultLogWriter.println("No payload given (payload is optional)");
+                    return;
+                }
 
             }
             boolean isZippedTar = extension.equals("tar.gz") || extension.equals("tgz");
@@ -370,7 +402,7 @@ class ApplyServerHttpHandler implements HttpHandler {
         return queryParams;
     }
 
-    private void runApplyScript(PrintWriter resultLogWriter, OutputStream os, String scriptToRun)
+    private int runApplyScript(PrintWriter resultLogWriter, OutputStream os, String scriptToRun)
             throws ExecuteException, IOException {
 
         String executableStr = StringUtils.substringBefore(scriptToRun, " ");
@@ -381,18 +413,18 @@ class ApplyServerHttpHandler implements HttpHandler {
         executableFile.setExecutable(true);
         resultLogWriter.println("--- Executing apply script: " + scriptToRun);
         resultLogWriter.flush();
+
         org.apache.commons.exec.CommandLine cmdLine = org.apache.commons.exec.CommandLine
                 .parse(scriptToRun.replaceFirst(executableStr, executableFile.getAbsolutePath()));
         DefaultExecutor executor = new DefaultExecutor();
         executor.setWorkingDirectory(executableFile.getParentFile().getAbsoluteFile());
-        executor.setStreamHandler(new PumpStreamHandler(os));
+
+        executor.setStreamHandler( new PumpStreamHandler(os));
         executor.setExitValues(IntStream.range(0, 100).toArray());
         int exitValue = executor.execute(cmdLine);
         resultLogWriter.println("--- Apply script '" + scriptToRun + "' returned " + exitValue);
-        if (exitValue > 0) {
-            throw new IllegalStateException("Script '" + scriptToRun + "' returned exit code " + exitValue);
-        }
 
+        return exitValue;
     }
 
     private void sendShortResult(HttpExchange exchange, int code, String rawMessage) throws IOException {
@@ -432,4 +464,27 @@ class ApplyServerHttpHandler implements HttpHandler {
         }
     }
 
+    private final class AutoFlushingOutputStream extends ProxyOutputStream {
+        private AutoFlushingOutputStream(OutputStream proxy) {
+            super(proxy);
+        }
+
+        @Override
+        public void write(int idx) throws IOException {
+            super.write(idx);
+            flush();
+        }
+
+        @Override
+        public void write(byte[] bts) throws IOException {
+            super.write(bts);
+            flush();
+        }
+
+        @Override
+        public void write(byte[] bts, int st, int end) throws IOException {
+            super.write(bts, st, end);
+            flush();
+        }
+    }
 }

@@ -47,6 +47,8 @@ public class ApplyServerConfig {
     private boolean enableDownload = false;
     private Pattern excludeFromDownloadPattern = EXCLUDE_FROM_DOWNLOAD_PATTERN_DEFAULT;
 
+    private boolean streamResponse = false;
+
     private String propertiesFilename;
 
     private Map<String, String> commands = new TreeMap<>();
@@ -95,6 +97,11 @@ public class ApplyServerConfig {
         options.addOption("ed", "exclude-from-download", true,
                 "Regex for files to be excluded from download");
 
+        options.addOption("sr", "stream-response", false,
+                "Instead of sending the response back in one chunk after script execution, it will stream back the response while the script is running."
+                + " The http response code will always be 200 for this mode and the script's"
+                + " exit code is returned as last line of the response. Can also be controlled via request header 'Stream-Response: true'.");
+
         try {
             // parse the command line arguments
             CommandLine line = parser.parse(options, args);
@@ -140,16 +147,16 @@ public class ApplyServerConfig {
             if (line.hasOption("ip-range")) {
                 String ipRangeRaw = line.getOptionValue("ip-range");
                 if(!ipRangeRaw.contains("/")) {
-                	ipRangeRaw += "/32"; // use /32, the CIDR for the exact ip
+                    ipRangeRaw += "/32"; // use /32, the CIDR for the exact ip
                 }
                 SubnetUtils subnetUtils;
                 try {
-                	subnetUtils = new SubnetUtils(ipRangeRaw);
+                    subnetUtils = new SubnetUtils(ipRangeRaw);
                 } catch(IllegalArgumentException e) {
-                	throw new IllegalArgumentException("Parameter --ip-range given with invalid value '"+ipRangeRaw+"': "+e, e);
+                    throw new IllegalArgumentException("Parameter --ip-range given with invalid value '"+ipRangeRaw+"': "+e, e);
                 }
                 subnetUtils.setInclusiveHostCount(true);
-        		ipRange = subnetUtils.getInfo();
+                ipRange = subnetUtils.getInfo();
             }
             
             if (line.hasOption("optional-payload")) {
@@ -185,23 +192,28 @@ public class ApplyServerConfig {
                 excludeFromDownloadPattern = getRegExPatternFromCommandLineOption(line, "exclude-from-download");
             }
 
+            if (line.hasOption("stream-response")) {
+                streamResponse = true;
+            }
+            
             isValid = true;
 
         } catch (Exception e) {
             isValid = false;
             System.out.println(e.getMessage());
             HelpFormatter formatter = new HelpFormatter();
+            formatter.setWidth(140);
             formatter.printHelp("apply-server", options);
         }
     }
 
-	private Pattern getRegExPatternFromCommandLineOption(CommandLine line, String parameterName) {
-		try {
-			return Pattern.compile(line.getOptionValue(parameterName));
-		} catch(PatternSyntaxException e) {
-			throw new IllegalArgumentException("Invalid regex for parameter "+parameterName+": "+e.getMessage(), e);
-		}
-	}
+    private Pattern getRegExPatternFromCommandLineOption(CommandLine line, String parameterName) {
+        try {
+            return Pattern.compile(line.getOptionValue(parameterName));
+        } catch(PatternSyntaxException e) {
+            throw new IllegalArgumentException("Invalid regex for parameter "+parameterName+": "+e.getMessage(), e);
+        }
+    }
 
     public boolean isValid() {
         return isValid;
@@ -236,10 +248,10 @@ public class ApplyServerConfig {
     }
     
     public SubnetInfo getIpRange() {
-		return ipRange;
-	}
+        return ipRange;
+    }
 
-	public boolean isOptionalPayload() {
+    public boolean isOptionalPayload() {
         return optionalPayload;
     }
 
@@ -263,4 +275,7 @@ public class ApplyServerConfig {
         return commands;
     }
 
+    public boolean isStreamResponse() {
+        return streamResponse;
+    }
 }

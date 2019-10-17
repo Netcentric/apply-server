@@ -48,8 +48,11 @@ public class ApplyServerHttpHandlerTest {
     HttpExchange exchange;
 
     @Spy
+    Headers requestHeaders;
+    
+    @Spy
     Headers responseHeaders;
-
+    
     Map<String, String> properties;
 
     ByteArrayOutputStream out;
@@ -63,8 +66,8 @@ public class ApplyServerHttpHandlerTest {
         properties.put("testProp2", "val2");
 
         // defaults
-
         when(exchange.getRequestURI()).thenReturn(new URI("/"));
+        when(exchange.getRequestHeaders()).thenReturn(requestHeaders);
         when(exchange.getResponseHeaders()).thenReturn(responseHeaders);
         when(exchange.getResponseBody()).thenReturn(out = new ByteArrayOutputStream());
 
