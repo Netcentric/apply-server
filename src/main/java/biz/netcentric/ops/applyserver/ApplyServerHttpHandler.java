@@ -240,13 +240,16 @@ class ApplyServerHttpHandler implements HttpHandler {
 
         boolean scriptSuccess = true;
         int responseCode = 200;
-        try(OutputStream responseBodyOutputStream = exchange.getResponseBody()) {
-
+        boolean isStreamResponse = false;
+        OutputStream responseBodyOutputStream = null;
+        PrintWriter scriptResultLogWriter = null;
+        try {
+            responseBodyOutputStream = exchange.getResponseBody();
+            
             String streamResponseHeader = exchange.getRequestHeaders().getFirst(HEADER_STREAM_RESPONSE);
-            boolean isStreamResponse = StringUtils.isNotBlank(streamResponseHeader) ? Boolean.valueOf(streamResponseHeader) : config.isStreamResponse();
+            isStreamResponse = StringUtils.isNotBlank(streamResponseHeader) ? Boolean.valueOf(streamResponseHeader) : config.isStreamResponse();
             
             OutputStream scriptResultLog;
-            PrintWriter scriptResultLogWriter;
             if(isStreamResponse) {
                 exchange.sendResponseHeaders(200, 0);
                 scriptResultLog  = new TeeOutputStream(resultLog, new AutoFlushingOutputStream(responseBodyOutputStream));
@@ -257,6 +260,7 @@ class ApplyServerHttpHandler implements HttpHandler {
             }
 
             int exitValue = runApplyScript(scriptResultLogWriter, scriptResultLog, scriptToRun);
+            
             scriptSuccess = (exitValue == 0);
             if(!scriptSuccess) {
                 responseCode = 500;
@@ -272,7 +276,20 @@ class ApplyServerHttpHandler implements HttpHandler {
                 exchange.sendResponseHeaders(responseCode, resultLog.size());
                 responseBodyOutputStream.write(resultLog.toByteArray());
             }
+        } catch(IOException|RuntimeException e) {
+            responseCode = 500;
+            if(isStreamResponse) {
+                scriptResultLogWriter.println(e.getMessage() + "\n\n1");
+                scriptResultLogWriter.flush();
+            } else {
+                throw e;
+            }
         } finally {
+            if(isStreamResponse) {
+                if(responseBodyOutputStream != null) {
+                    responseBodyOutputStream.close();
+                }
+            }
 
             // write file
             try (OutputStream fileOs = new FileOutputStream(
