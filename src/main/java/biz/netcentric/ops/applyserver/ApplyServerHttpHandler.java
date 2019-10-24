@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.ExecuteException;
 import org.apache.commons.exec.PumpStreamHandler;
@@ -53,7 +54,7 @@ class ApplyServerHttpHandler implements HttpHandler {
     static final String CONTENT_TYPE_HTML = "text/html";
 
     static final String HEADER_APIKEY = "apikey";
-    static final String APPLY_LOGFILE_DEFAULT = "_apply.log";
+    static final String APPLY_LOGFILE_DEFAULT = ".apply.log";
 
     static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
     static final String HEADER_STREAM_RESPONSE = "Stream-Response";
@@ -243,6 +244,7 @@ class ApplyServerHttpHandler implements HttpHandler {
         boolean isStreamResponse = false;
         OutputStream responseBodyOutputStream = null;
         PrintWriter scriptResultLogWriter = null;
+        FileOutputStream fileOutputStream = null;
         try {
             responseBodyOutputStream = exchange.getResponseBody();
             
@@ -252,7 +254,16 @@ class ApplyServerHttpHandler implements HttpHandler {
             OutputStream scriptResultLog;
             if(isStreamResponse) {
                 exchange.sendResponseHeaders(200, 0);
-                scriptResultLog  = new TeeOutputStream(resultLog, new AutoFlushingOutputStream(responseBodyOutputStream));
+
+                fileOutputStream = getApplyServerLogFileOutputStream();
+                // stream to log file and response
+                OutputStream additionalStreamingOutputs = new AutoFlushingOutputStream(new TeeOutputStream(responseBodyOutputStream, fileOutputStream));
+                
+                // flush(=stream) existing log also into http response and log file
+                resultLogWriter.flush();
+                additionalStreamingOutputs.write(resultLog.toByteArray());
+
+                scriptResultLog  = new TeeOutputStream(resultLog, additionalStreamingOutputs);
                 scriptResultLogWriter = new PrintWriter(scriptResultLog);
             } else {
                 scriptResultLog = resultLog;
@@ -286,21 +297,31 @@ class ApplyServerHttpHandler implements HttpHandler {
             }
         } finally {
             if(isStreamResponse) {
-                if(responseBodyOutputStream != null) {
-                    responseBodyOutputStream.close();
+                IOUtils.closeQuietly(responseBodyOutputStream);
+            }
+
+            if(isStreamResponse) {
+                // just close file that was already written
+                IOUtils.closeQuietly(fileOutputStream);
+            } else {
+                // write file
+                try (OutputStream fileOs = getApplyServerLogFileOutputStream()) {
+                    fileOs.write(resultLog.toByteArray());
                 }
             }
 
-            // write file
-            try (OutputStream fileOs = new FileOutputStream(
-                    ApplyServer.getFile(this.config.getDestination(), APPLY_LOGFILE_DEFAULT))) {
-                fileOs.write(resultLog.toByteArray());
-            }
-        
         }
         
         // add to last results
         this.lastResults.add(new ScriptResult(scriptToRun, scriptSuccess ? "success": "failed" , responseCode, resultLog.toString()));
+    }
+
+    private FileOutputStream getApplyServerLogFileOutputStream() throws FileNotFoundException, IOException {
+        return new FileOutputStream(getApplyServerLogFile());
+    }
+
+    private File getApplyServerLogFile() throws IOException {
+        return ApplyServer.getFile(this.config.getDestination(), APPLY_LOGFILE_DEFAULT);
     }
 
     private void handleUpload(HttpExchange exchange, PrintWriter resultLogWriter, String requestPath,
