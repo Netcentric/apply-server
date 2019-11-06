@@ -127,7 +127,11 @@ public class ZipDeflater {
                 propertiesUsed.put(key, value);
             } else {
                 value = matcher.group(0);
-                propertiesUsed.put(key, "<left unchanged>");
+                String valFromSysEnv = System.getenv().get(key);
+                propertiesUsed.put(key, 
+                        StringUtils.isNotBlank(valFromSysEnv) ? 
+                                "<left unchanged but OS Env contains value '"+valFromSysEnv+"' that may become active>" : 
+                                "<left unchanged>");
             }
 
             value = value.replace("$", "\\$"); // ensure remaining variables are not treated as back reference
