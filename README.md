@@ -52,7 +52,7 @@ $ java -jar apply-server-1.5.0.jar
 usage: apply-server
  -c,--command <arg>                   allows to map URL paths to certain
                                       scripts: -c myscript=myscript.sh
-                                      will run myscript.sh in desination
+                                      will run myscript.sh in destination
                                       upon POST requests to /myscript.
                                       Multiple -c options can be provided,
                                       the script provided with -s is the
