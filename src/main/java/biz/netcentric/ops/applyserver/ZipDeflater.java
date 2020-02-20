@@ -8,6 +8,7 @@
  */
 package biz.netcentric.ops.applyserver;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,14 +17,17 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Enumeration;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -44,22 +48,31 @@ public class ZipDeflater {
     }
 
     int extractZip(InputStream is, PrintWriter resultLogWriter, Map<String, String> propertiesUsed) throws IOException {
-        int count = 0;
-        try (ZipInputStream zis = new ZipInputStream(is)) {
-            ZipEntry zipEntry = zis.getNextEntry();
 
-            while (zipEntry != null) {
-                if (zipEntry.isDirectory()) {
-                    zipEntry = zis.getNextEntry();
+        // Using ZipArchiveInputStream does not make all properties accessible => Use of tmp file and ZipFile works
+        // see https://commons.apache.org/proper/commons-compress/apidocs/org/apache/commons/compress/archivers/zip/ZipArchiveEntry.html#getExternalAttributes--
+        File tempZipFile = File.createTempFile("applyserver-", "-temp.zip");
+        FileUtils.copyInputStreamToFile(is, tempZipFile);
+
+        int count = 0;
+        try (ZipFile zipFile = new ZipFile(tempZipFile)) {
+            
+            Enumeration<? extends ZipArchiveEntry> entries = zipFile.getEntries();
+            ZipArchiveEntry entry;
+            while (entries.hasMoreElements()) {
+               entry = entries.nextElement();
+               if (entry.isDirectory()) {
                     continue;
                 }
-                String fileName = zipEntry.getName();
-                processFile(fileName, zis, resultLogWriter, propertiesUsed);
+
+                String entryName = entry.getName();
+                processFile(entryName, zipFile.getInputStream(entry), resultLogWriter, propertiesUsed, entry.isUnixSymlink());
                 count++;
-                zipEntry = zis.getNextEntry();
             }
-            zis.closeEntry();
         }
+        
+        FileUtils.deleteQuietly(tempZipFile);
+
         return count;
     }
 
@@ -72,16 +85,30 @@ public class ZipDeflater {
                     continue;
                 }
                 String entryName = entry.getName();
-                processFile(entryName, fin, resultLogWriter, propertiesUsed);
+                
+                InputStream relevantEntryInputStream = fin;
+                
+                boolean symbolicLink = entry.isSymbolicLink();
+                if(symbolicLink) {
+                    relevantEntryInputStream = new ByteArrayInputStream(entry.getLinkName().getBytes(StandardCharsets.ISO_8859_1));
+                }
+
+                processFile(entryName, relevantEntryInputStream, resultLogWriter, propertiesUsed, symbolicLink);
                 count++;
             }
         }
         return count;
     }
 
-    private void processFile(String entryName, InputStream fileContentsIs, PrintWriter resultLogWriter, Map<String, String> propertiesUsed)
+    private void processFile(String entryName, InputStream fileContentsIs, PrintWriter resultLogWriter, Map<String, String> propertiesUsed, boolean isSymlink)
             throws IOException {
         File curfile = new File(destination, entryName);
+        
+        if(isSymlink) {
+            createSymlink(entryName, fileContentsIs, resultLogWriter, curfile);
+            return;
+        }
+
         File parent = curfile.getParentFile();
         if (!parent.exists()) {
             parent.mkdirs();
@@ -111,6 +138,20 @@ public class ZipDeflater {
             FileUtils.writeByteArrayToFile(curfile, fileContentByteArray);
         }
 
+    }
+
+    private void createSymlink(String entryName, InputStream fileContentsIs, PrintWriter resultLogWriter, File curfile) {
+        Path symlinkTarget = null;
+        try {
+            symlinkTarget = new File(IOUtils.toString(fileContentsIs, StandardCharsets.ISO_8859_1)).toPath();
+            if(curfile.exists()) {
+                curfile.delete(); // createSymbolicLink requires the file to not exist
+            }
+            Files.createSymbolicLink(curfile.toPath(), symlinkTarget);
+            resultLogWriter.println("Created symbolic link " + entryName + " -> "+symlinkTarget);
+        } catch (Exception e) {
+            resultLogWriter.println("Could not create symbolic link " + entryName + " -> "+symlinkTarget +": " + e.getMessage() + " ("+e.getClass()+")");
+        }
     }
 
     private String filterFileContents(String fileContents, String entryName, PrintWriter resultLogWriter,
