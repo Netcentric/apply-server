@@ -48,7 +48,7 @@ Apply server is a simple jar that can be run via `java -jar` on JREs > 1.8 and h
 ## Start Server on target system
 
 ```
-$ java -jar apply-server-1.5.0.jar
+$ java -jar apply-server-1.6.2.jar
 usage: apply-server
  -c,--command <arg>                   allows to map URL paths to certain
                                       scripts: -c myscript=myscript.sh
@@ -110,15 +110,15 @@ usage: apply-server
 ### start server to take and unpack zip, filter it and run an apply script afterwards:
 
 ```
-java -jar apply-server-1.5.0.jar -p 448 -d /path/to/destination -s applyConfig.sh --api-key MT7HpOKnx5 # secured via api key secret
-java -jar apply-server-1.5.0.jar -p 448 -d /path/to/destination -s applyConfig.sh --ip-range 100.200.300.0/16 # secured via ip range protection
+java -jar apply-server-1.6.2.jar -p 448 -d /path/to/destination -s applyConfig.sh --api-key MT7HpOKnx5 # secured via api key secret
+java -jar apply-server-1.6.2.jar -p 448 -d /path/to/destination -s applyConfig.sh --ip-range 100.200.300.0/16 # secured via ip range protection
 
 ```
 
 ### start a server to run scripts remotely
 
 ```
-java -jar apply-server-1.5.0.jar -p 448 -d /path/to/scripts --optional-payload -c /script1=myScript1.sh -c /script2=myScript2.sh --api-key MT7HpOKnx5  # secured via api key secret
+java -jar apply-server-1.6.2.jar -p 448 -d /path/to/scripts --optional-payload -c /script1=myScript1.sh -c /script2=myScript2.sh --api-key MT7HpOKnx5  # secured via api key secret
 # alternatively (or in combination) use --ip-range 100.200.300.0/16 to secure via ip range protection
 
 ```
@@ -146,7 +146,7 @@ No upload required, often used along with multiple -c parameters
 if the server was stared with
 
 ```
-java -jar apply-server-1.5.0.jar -d /path/to/scripts --optional-payload -c /script1=myScript1.sh -c /script2=myScript2.sh ...
+java -jar apply-server-1.6.2.jar -d /path/to/scripts --optional-payload -c /script1=myScript1.sh -c /script2=myScript2.sh ...
 ```
 
 the following two commands will run myScript1.sh or myScript2.sh respectively:
@@ -158,6 +158,63 @@ curl -X POST -H "apikey: MT7HpOKnx5" http://myserver:448/script1
 curl -X POST -H "apikey: MT7HpOKnx5" http://myserver:448/script2
 ```
 
+## Using Apply Server with Apache Httpd 
+
+A simple script `restartApache.sh` looks as follows:
+
+```
+# fail immedately in case of invalid config
+set -e  
+# test the config
+apachectl configtest
+# restart gracefully without downtime (will start server if not yet running)
+apachectl graceful
+```
+
+The following start command can be used to start the apply server:
+
+```
+java -jar apply-server-1.6.2.jar -d /etc/apache2 -p 8449 -s restartApache.sh -nf 
+```
+
+To perform a restart, the curl command
+
+```
+$ curl -X POST http://localhost:8449/?format=zip --data-binary @httpd-config.zip 
+```
+
+produces the following output for the case the configuration is correct:
+
+```
+Request from /0:0:0:0:0:0:0:1:55878 at 2020-02-20 21:29:54
+Processing entity /
+--- Placing files:
+Filtering is disabled
+Extracted httpd.conf                                         (not filtered)
+--- Executing apply script: restartSystemApache.sh
+Syntax OK
+Restarted apache.
+--- Apply script 'restartSystemApache.sh' returned 0
+Finished after 166ms
+```
+
+If the config contains an error it looks as follows:
+
+```
+Request from /0:0:0:0:0:0:0:1:56008 at 2020-02-20 21:33:17
+Processing entity /
+--- Placing files:
+Filtering is disabled
+Extracted httpd.conf                                         (not filtered)
+--- Executing apply script: restartSystemApache.sh
+AH00526: Syntax error on line 1 of /usr/local/etc/httpd/httpd.conf:
+Invalid command 'InvalidDirective', perhaps misspelled or defined by a module not included in the server configuration
+--- Apply script 'restartSystemApache.sh' returned 1
+Finished after 34ms
+```
+
+For the error case the http response code is `500`.
+
 ## Listing past executions (via GET)
 Just calling `http://myserver:448` in browser will list all past executions and give links to see the logs of each execution.
 
@@ -166,7 +223,7 @@ The following snippet will download and start the apply server with the given ar
 
 ```
 ### Parameters ###
-$apply_server_version = '1.5.0'
+$apply_server_version = '1.6.2'
 $apply_server_target_dir = '/opt/files'
 $apply_server_port = 8089
 $apply_server_additional_arguments = ' -du -dl'
