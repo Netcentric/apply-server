@@ -143,7 +143,7 @@ curl -X POST -H "apikey: MT7HpOKnx5" --data-binary "@path/to/my-config-package.t
 ## Running scripts only
 No upload required, often used along with multiple -c parameters
 
-if the server was stared with
+if the server was started with
 
 ```
 java -jar apply-server-1.6.2.jar -d /path/to/scripts --optional-payload -c /script1=myScript1.sh -c /script2=myScript2.sh ...
