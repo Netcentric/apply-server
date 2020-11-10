@@ -1,0 +1,2 @@
+This folder contains the Swagger UI site which is published on GitHub Pages leveraging the template from <https://github.com/peter-evans/swagger-github-pages>. Further information at <https://peterevans.dev/posts/how-to-host-swagger-docs-with-github-pages/>. Everything below `dist` is automatically updated once a new Swagger UI version is out via dedicated PRs being created by `.github/workflows/update-swagger.yml`.
+The actual API definition is in `openapi.yaml`.

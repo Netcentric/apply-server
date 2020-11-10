@@ -1,0 +1,168 @@
+openapi: 3.0.1
+info:
+  title: Apply Server
+  description: 'This is the Apply Server ReST API documenation. You can run the methods against your own server by adding your domain and port under which the server is running and authorize witha valid API key'
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+externalDocs:
+  description: GitHub Repository
+  url: https://github.com/Netcentric/apply-server
+servers:
+  - url: http://{domain}:{port}/v2
+    variables:
+      domain:
+        default: localhost
+        description: The server domain under which the Apply Server is running
+      port:
+        default: 448
+        description: The port under which the Apply Server is running
+security:
+  - apiKey: []
+paths:
+  /{configurationArchiveFileName}:
+    post:
+      summary: Upload configuration archive and run the default script
+      parameters:
+        - in: path
+          name: configurationArchiveFileName
+          required: true
+          schema:
+            type: string
+          description: The file name of the configuraton archive (from which the format is determined). Only extensions tar.gz, tgz, tar and zip are supported.
+          example: package-name.tar.gz
+      requestBody:
+        description: The configuration archive in zip or tar.gz format
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        required: true
+      responses:
+        400:
+          description: Invalid api key supplied
+          content: {}
+        500:
+          description: IP not allowed or some other internal exception.
+          content: {}
+        200:
+          description: Successfull upload and executon
+          content:
+            text/plain:
+              schema:
+                type: string
+  /{command}:
+    post:
+      summary: Run a specific command
+      parameters:
+        - in: path
+          name: command
+          required: true
+          schema:
+            type: string
+          description: The command which was registered when the server was started.
+          example: myscript
+      responses:
+        400:
+          description: Invalid api key supplied.
+          content: {}
+        500:
+          description: IP not allowed or some other internal exception.
+          content: {}
+        200:
+          description: Successfull upload and execution.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /:
+    get:
+      summary: Retrieve possible get paths.
+      responses:
+        400:
+          description: Invalid api key supplied.
+          content: {}
+        200:
+          description: A HTML page containing links to all supported GET operations.
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      summary: Upload configuration archive and run default script
+      parameters:
+        - in: query
+          name: format
+          required: true
+          schema:
+            type: string
+            enum:
+              - tar.gz
+              - tgz
+              - tar
+              - zip
+          description: The extension of the given configuraton archive (from which the format is determined).
+          example: tar.gz
+      requestBody:
+        description: The configuration archive in the given format.
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        required: true
+      responses:
+        400:
+          description: Invalid api key supplied or script already running.
+          content: {}
+        500:
+          description: IP not allowed or some other internal exception.
+          content: {}
+        200:
+          description: Successfull upload and execution.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /run/{index}:
+    get:
+      summary: Get script execution output of script with given index
+      parameters:
+        - in: header
+          name: apikey
+          schema:
+            type: string
+          required: true
+          example: MT7HpOKnx5
+        - in: path
+          name: index
+          required: true
+          schema:
+            type: integer
+          description: The index of the configuration file to execute.
+      responses:
+        200:
+          description: Found output of script.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /download.tar.gz:
+    get:
+      summary: Download the configuration archive
+      responses:
+        200:
+          description: Downloaded file
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      name: apikey
+      in: header
