@@ -184,6 +184,7 @@
                         <exclude>LICENSE.txt</exclude>
                         <exclude>.github/workflows/**</exclude>
                         <exclude>**/**.tar.gz</exclude>
+                        <exclude>docs/**</exclude>
                     </excludes>
                 </configuration>
                 <executions>
