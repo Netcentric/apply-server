@@ -1,9 +1,15 @@
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/biz.netcentric.ops.applyserver/apply-server/badge.svg)](https://maven-badges.herokuapp.com/maven-central/biz.netcentric.ops.applyserver/apply-server)
+[![License](https://img.shields.io/badge/License-EPL%201.0-red.svg)](https://opensource.org/licenses/EPL-1.0)
+[![Build Status](https://github.com/Netcentric/apply-server/workflows/Build/badge.svg)](https://github.com/Netcentric/apply-server/actions)
+[![SonarCloud Status](https://sonarcloud.io/api/project_badges/measure?project=Netcentric_apply-server&metric=alert_status)](https://sonarcloud.io/dashboard?id=Netcentric_apply-server)
+[![SonarCloud Coverage](https://sonarcloud.io/api/project_badges/measure?project=Netcentric_apply-server&metric=coverage)](https://sonarcloud.io/component_measures/metric/coverage/list?id=Netcentric_apply-server)
+
 Apply Server
 ================================================
 
 # Overview
 
-The idea behind "Apply Server" is to control the server via http (instead of ssh). Use cases are 
+The idea behind "Apply Server" is to control a remote computer via http (instead of ssh). Use cases are 
 
 * Deploy configuration files and restart services (e.g. httpd)
 * Run maintenance scripts 
@@ -124,23 +130,26 @@ java -jar apply-server-1.6.2.jar -p 448 -d /path/to/scripts --optional-payload -
 ```
 
 ## Client Usage
-Push configurations to it from elsewhere and run a script to use the new files
+Push configurations to it from elsewhere and run a script to use the new files.
+
+The full API documentation is at <https://netcentric.github.io/apply-server/index.html> based on the OpenAPI v3 yaml file at [`docs/openapi.yaml`](./docs/openapi.yaml).
+
+
+### Upload and run default script
 
 To push configurations to the target system and run the script as provided by server start:
-
-#### upload and run default script
 
 ```
 curl -X POST -H "apikey: MT7HpOKnx5" --data-binary "@path/to/my-config-package.tar.gz" http://myserver:448/package-name.tar.gz
 ```
 
-#### or format parameter can be given to not include the filename in path
+alternatively the `format` parameter can be given to not include the filename in path:
 
 ```
 curl -X POST -H "apikey: MT7HpOKnx5" --data-binary "@path/to/my-config-package.tar.gz" http://myserver:448?format=tar.gz
 ```
 
-## Running scripts only
+### Run scripts only
 No upload required, often used along with multiple -c parameters
 
 if the server was started with
@@ -158,7 +167,7 @@ curl -X POST -H "apikey: MT7HpOKnx5" http://myserver:448/script1
 curl -X POST -H "apikey: MT7HpOKnx5" http://myserver:448/script2
 ```
 
-## Using Apply Server with Apache Httpd 
+### Using Apply Server with Apache Httpd 
 
 A simple script `restartApache.sh` looks as follows:
 
@@ -215,7 +224,7 @@ Finished after 34ms
 
 For the error case the http response code is `500`.
 
-## Listing past executions (via GET)
+### Listing past executions (via GET)
 Just calling `http://myserver:448` in browser will list all past executions and give links to see the logs of each execution.
 
 # Setup Apply Server via puppet
